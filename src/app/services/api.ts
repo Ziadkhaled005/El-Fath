@@ -210,6 +210,24 @@ export const branchesApi = {
     async list() {
         return request("/api/Branches");
     },
+
+    async create(payload: Record<string, unknown>) {
+        return request("/api/Branches", {
+            method: "POST",
+            body: JSON.stringify(payload),
+        });
+    },
+
+    async update(id: number, payload: Record<string, unknown>) {
+        return request(`/api/Branches/${id}`, {
+            method: "PUT",
+            body: JSON.stringify({ id, ...payload }),
+        });
+    },
+
+    async remove(id: number) {
+        return request(`/api/Branches/${id}`, { method: "DELETE" });
+    },
 };
 
 export const notificationsApi = {
@@ -230,17 +248,62 @@ export const suppliersApi = {
     async list(params?: Record<string, string | number | boolean | undefined>) {
         return request(`/api/Suppliers${buildQuery(params)}`);
     },
+
+    async create(payload: Record<string, unknown>) {
+        return request("/api/Suppliers", {
+            method: "POST",
+            body: JSON.stringify(payload),
+        });
+    },
+
+    async update(id: number, payload: Record<string, unknown>) {
+        return request(`/api/Suppliers/${id}`, {
+            method: "PUT",
+            body: JSON.stringify({ id, ...payload }),
+        });
+    },
+
+    async remove(id: number) {
+        return request(`/api/Suppliers/${id}`, { method: "DELETE" });
+    },
 };
 
 export const salesApi = {
     async list(params?: Record<string, string | number | boolean | undefined>) {
         return request(`/api/sales${buildQuery(params)}`);
     },
+
+    async create(payload: Record<string, unknown>) {
+        return request("/api/sales", {
+            method: "POST",
+            body: JSON.stringify(payload),
+        });
+    },
 };
 
 export const purchasesApi = {
     async list(params?: Record<string, string | number | boolean | undefined>) {
         return request(`/api/purchases${buildQuery(params)}`);
+    },
+};
+
+export const expensesApi = {
+    async list(params?: Record<string, string | number | boolean | undefined>) {
+        return request(`/api/Expenses${buildQuery(params)}`);
+    },
+
+    async create(payload: Record<string, unknown>) {
+        return request("/api/Expenses", {
+            method: "POST",
+            body: JSON.stringify(payload),
+        });
+    },
+
+    async update(id: number | string, payload: Record<string, unknown>) {
+        return request(`/api/Expenses/${id}`, {
+            method: "PUT",
+            body: JSON.stringify({ id, ...payload }),
+        });
     },
 };
 

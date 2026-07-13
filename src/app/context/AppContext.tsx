@@ -120,14 +120,24 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
     }, []);
 
-    const markNotificationRead = useCallback((id: number) => {
+    const markNotificationRead = useCallback(async (id: number) => {
         setNotifications((prev) =>
             prev.map((n) => (n.id === id ? { ...n, read: true } : n)),
         );
+        try {
+            await notificationsApi.markRead(id);
+        } catch {
+            // keep the optimistic UI update and continue
+        }
     }, []);
 
-    const markAllRead = useCallback(() => {
+    const markAllRead = useCallback(async () => {
         setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+        try {
+            await notificationsApi.markAllRead();
+        } catch {
+            // keep the optimistic UI update and continue
+        }
     }, []);
 
     const toggleSidebar = useCallback(() => {
