@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Search, Edit, Trash2, X, Eye } from 'lucide-react';
 import { Header } from '../components/Header';
 import { EMPLOYEES } from '../data/mockData';
 import { useApp } from '../context/AppContext';
+import { employeesApi, normalizeCollection } from '../services/api';
 
 type Employee = typeof EMPLOYEES[0];
 
@@ -15,6 +16,20 @@ export function HR() {
   const [editItem, setEditItem] = useState<Employee | null>(null);
   const [form, setForm] = useState({ name: '', position: '', department: '', salary: '', phone: '' });
 
+  useEffect(() => {
+    const loadEmployees = async () => {
+      try {
+        const payload = await employeesApi.list({ page: 1, pageSize: 100 });
+        const items = normalizeCollection<Employee>(payload);
+        if (items.length > 0) setEmployees(items);
+      } catch {
+        setEmployees(EMPLOYEES);
+      }
+    };
+
+    loadEmployees();
+  }, []);
+
   const filtered = employees.filter(e => e.name.includes(search) || e.position.includes(search));
 
   const openEdit = (e: Employee) => {
@@ -23,16 +38,47 @@ export function HR() {
     setShowForm(true);
   };
 
-  const save = () => {
+  const save = async () => {
     if (!form.name) { addToast({ type: 'error', message: 'الاسم مطلوب' }); return; }
+    const payload = { ...form, salary: Number(form.salary) };
     if (editItem) {
-      setEmployees(prev => prev.map(e => e.id === editItem.id ? { ...e, ...form, salary: Number(form.salary) } : e));
-      addToast({ type: 'success', message: 'تم التحديث' });
+      setEmployees(prev => prev.map(e => e.id === editItem.id ? { ...e, ...payload } : e));
+      try {
+        await employeesApi.update(editItem.id, payload);
+        addToast({ type: 'success', message: 'تم التحديث' });
+      } catch {
+        addToast({ type: 'error', message: 'تعذر تحديث الموظف على الخادم' });
+      }
     } else {
-      setEmployees(prev => [...prev, { id: Date.now(), ...form, salary: Number(form.salary), branch: 1, attendance: 0, vacations: 0, status: 'active' as const }]);
-      addToast({ type: 'success', message: 'تم إضافة الموظف' });
+      setEmployees(prev => [...prev, { id: Date.now(), ...payload, branch: 1, attendance: 0, vacations: 0, status: 'active' as const }]);
+      try {
+        await employeesApi.create(payload);
+        addToast({ type: 'success', message: 'تم إضافة الموظف' });
+      } catch {
+        addToast({ type: 'error', message: 'تعذر إضافة الموظف على الخادم' });
+      }
     }
     setShowForm(false); setEditItem(null);
+  };
+
+  const deleteEmployee = async (id: number) => {
+    if (!confirm('حذف الموظف؟')) return;
+    setEmployees(p => p.filter(x => x.id !== id));
+    try {
+      await employeesApi.remove(id);
+      addToast({ type: 'success', message: 'تم الحذف' });
+    } catch {
+      addToast({ type: 'error', message: 'تعذر حذف الموظف على الخادم' });
+    }
+  };
+
+  const requestLeave = async () => {
+    try {
+      await employeesApi.requestLeave({ type: 'vacation' });
+      addToast({ type: 'info', message: 'جارٍ معالجة طلب الإجازة...' });
+    } catch {
+      addToast({ type: 'error', message: 'تعذر إرسال طلب الإجازة للخادم' });
+    }
   };
 
   const totalSalary = employees.reduce((s, e) => s + e.salary, 0);
@@ -109,7 +155,7 @@ export function HR() {
                     <button onClick={() => openEdit(e)} style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5, padding: '7px', border: '1px solid #E5E7EB', borderRadius: 8, background: '#F9FAFB', cursor: 'pointer', fontSize: 12, fontFamily: 'Cairo, sans-serif', color: '#6B7280' }}>
                       <Edit size={13} /> تعديل
                     </button>
-                    <button onClick={() => { if (confirm('حذف الموظف؟')) { setEmployees(p => p.filter(x => x.id !== e.id)); addToast({ type: 'success', message: 'تم الحذف' }); } }} style={{ padding: '7px 12px', border: '1px solid #FEE2E2', borderRadius: 8, background: '#FFF5F5', cursor: 'pointer', color: '#EF4444' }}>
+                    <button onClick={() => deleteEmployee(e.id)} style={{ padding: '7px 12px', border: '1px solid #FEE2E2', borderRadius: 8, background: '#FFF5F5', cursor: 'pointer', color: '#EF4444' }}>
                       <Trash2 size={13} />
                     </button>
                   </div>
@@ -181,7 +227,7 @@ export function HR() {
                     <p style={{ margin: 0, fontSize: 10, color: '#9CA3AF' }}>يوم</p>
                   </div>
                 </div>
-                <button onClick={() => addToast({ type: 'info', message: 'جارٍ معالجة طلب الإجازة...' })} style={{ marginTop: 12, width: '100%', padding: '8px', background: '#F3F4F6', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontFamily: 'Cairo, sans-serif', color: '#374151' }}>
+                <button onClick={requestLeave} style={{ marginTop: 12, width: '100%', padding: '8px', background: '#F3F4F6', border: 'none', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontFamily: 'Cairo, sans-serif', color: '#374151' }}>
                   طلب إجازة
                 </button>
               </div>

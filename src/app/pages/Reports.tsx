@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Download, Printer, BarChart2, FileText, Package, Users, Truck, DollarSign, GitBranch, UserSquare } from 'lucide-react';
 import { Header } from '../components/Header';
 import { useApp } from '../context/AppContext';
 import { SALES_INVOICES, PURCHASES, PRODUCTS, EMPLOYEES, BRANCHES, SALES_CHART_DATA } from '../data/mockData';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, AreaChart, Area } from 'recharts';
+import { normalizeCollection, reportsApi } from '../services/api';
 
 type ReportType = 'sales' | 'purchases' | 'inventory' | 'customers' | 'suppliers' | 'expenses' | 'branches' | 'employees';
 
@@ -23,11 +24,34 @@ export function Reports() {
   const [activeReport, setActiveReport] = useState<ReportType>('sales');
   const [dateFrom, setDateFrom] = useState('2024-01-01');
   const [dateTo, setDateTo] = useState('2024-06-30');
+  const [reportRows, setReportRows] = useState<unknown[]>([]);
+  const [reportChart, setReportChart] = useState(SALES_CHART_DATA);
+  const [reportSummary, setReportSummary] = useState<Record<string, unknown>>({});
+
+  useEffect(() => {
+    const loadReport = async () => {
+      try {
+        const payload = await reportsApi.get(activeReport, { dateFrom, dateTo });
+        const rows = normalizeCollection(payload);
+        setReportRows(rows);
+        const container = payload as { chart?: typeof SALES_CHART_DATA; summary?: Record<string, unknown> };
+        if (Array.isArray(container.chart)) setReportChart(container.chart);
+        if (container.summary) setReportSummary(container.summary);
+      } catch {
+        setReportRows([]);
+        setReportChart(SALES_CHART_DATA);
+        setReportSummary({});
+      }
+    };
+
+    loadReport();
+  }, [activeReport, dateFrom, dateTo]);
 
   const handleExport = (type: string) => addToast({ type: 'info', message: `جارٍ تصدير التقرير بصيغة ${type}...` });
   const handlePrint = () => addToast({ type: 'info', message: 'جارٍ إرسال التقرير للطباعة...' });
 
   const reportInfo = REPORT_TYPES.find(r => r.id === activeReport);
+  const salesRows = reportRows.length > 0 ? reportRows as typeof SALES_INVOICES : SALES_INVOICES;
 
   return (
     <div style={{ fontFamily: 'Cairo, sans-serif' }}>
@@ -91,7 +115,7 @@ export function Reports() {
             {activeReport === 'sales' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12 }}>
-                  {[['إجمالي المبيعات', '736,000 ج.م', '#10B981'], ['عدد الفواتير', SALES_INVOICES.length, '#3B82F6'], ['متوسط الفاتورة', '14,720 ج.م', '#D4AF37'], ['مدفوعة بالكامل', SALES_INVOICES.filter(i => i.status === 'paid').length, '#8B5CF6']].map(([k, v, c]) => (
+                  {[['إجمالي المبيعات', String(reportSummary.totalSales ?? '736,000 ج.م'), '#10B981'], ['عدد الفواتير', salesRows.length, '#3B82F6'], ['متوسط الفاتورة', String(reportSummary.averageInvoice ?? '14,720 ج.م'), '#D4AF37'], ['مدفوعة بالكامل', salesRows.filter(i => i.status === 'paid').length, '#8B5CF6']].map(([k, v, c]) => (
                     <div key={k as string} style={{ background: '#fff', borderRadius: 12, padding: '14px 16px', boxShadow: '0 1px 6px rgba(0,0,0,0.05)', border: '1px solid #F3F4F6' }}>
                       <p style={{ margin: '0 0 4px', fontSize: 12, color: '#9CA3AF' }}>{k}</p>
                       <p style={{ margin: 0, fontSize: 20, fontWeight: 800, color: c as string }}>{v}</p>
@@ -101,7 +125,7 @@ export function Reports() {
                 <div style={{ background: '#fff', borderRadius: 14, padding: '20px 22px', boxShadow: '0 1px 6px rgba(0,0,0,0.05)', border: '1px solid #F3F4F6' }}>
                   <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 700 }}>تطور المبيعات الشهري</h3>
                   <ResponsiveContainer width="100%" height={240}>
-                    <AreaChart data={SALES_CHART_DATA}>
+                    <AreaChart data={reportChart}>
                       <defs>
                         <linearGradient id="salesGr" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor="#D4AF37" stopOpacity={0.2} />
@@ -126,7 +150,7 @@ export function Reports() {
                       </tr>
                     </thead>
                     <tbody>
-                      {SALES_INVOICES.map(inv => (
+                      {salesRows.map(inv => (
                         <tr key={inv.id} style={{ borderBottom: '1px solid #F3F4F6' }}>
                           <td style={{ padding: '10px 14px', fontSize: 13, color: '#D4AF37', fontWeight: 600 }}>{inv.id}</td>
                           <td style={{ padding: '10px 14px', fontSize: 13, color: '#374151' }}>{inv.date}</td>

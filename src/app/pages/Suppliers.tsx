@@ -98,6 +98,23 @@ export function Suppliers() {
         setEditItem(null);
     };
 
+    const deleteSupplier = async (id: number) => {
+        if (!confirm("حذف المورد؟")) return;
+        setSuppliers((p) => p.filter((x) => x.id !== id));
+        try {
+            await suppliersApi.remove(id);
+            addToast({
+                type: "success",
+                message: "تم الحذف",
+            });
+        } catch {
+            addToast({
+                type: "error",
+                message: "تعذر الاتصال بالخادم، تم حذف المورد محلياً فقط",
+            });
+        }
+    };
+
     return (
         <div style={{ fontFamily: "Cairo, sans-serif" }}>
             <Header
@@ -443,19 +460,7 @@ export function Suppliers() {
                                         <Edit size={13} /> تعديل
                                     </button>
                                     <button
-                                        onClick={() => {
-                                            if (confirm("حذف المورد؟")) {
-                                                setSuppliers((p) =>
-                                                    p.filter(
-                                                        (x) => x.id !== s.id,
-                                                    ),
-                                                );
-                                                addToast({
-                                                    type: "success",
-                                                    message: "تم الحذف",
-                                                });
-                                            }
-                                        }}
+                                        onClick={() => deleteSupplier(s.id)}
                                         style={{
                                             padding: "7px 12px",
                                             border: "1px solid #FEE2E2",

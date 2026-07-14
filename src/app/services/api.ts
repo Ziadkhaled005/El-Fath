@@ -118,6 +118,24 @@ export const authApi = {
         });
     },
 
+    async forgotPassword(email: string) {
+        return request(
+            "/api/Auth/forgot-password",
+            {
+                method: "POST",
+                body: JSON.stringify({ email }),
+            },
+            false,
+        );
+    },
+
+    async changePassword(payload: Record<string, unknown>) {
+        return request("/api/Auth/change-password", {
+            method: "POST",
+            body: JSON.stringify(payload),
+        });
+    },
+
     isAuthenticated() {
         return Boolean(getStoredToken());
     },
@@ -279,11 +297,41 @@ export const salesApi = {
             body: JSON.stringify(payload),
         });
     },
+
+    async remove(id: number | string) {
+        return request(`/api/sales/${id}`, { method: "DELETE" });
+    },
 };
 
 export const purchasesApi = {
     async list(params?: Record<string, string | number | boolean | undefined>) {
         return request(`/api/purchases${buildQuery(params)}`);
+    },
+
+    async create(payload: Record<string, unknown>) {
+        return request("/api/purchases", {
+            method: "POST",
+            body: JSON.stringify(payload),
+        });
+    },
+
+    async update(id: number | string, payload: Record<string, unknown>) {
+        return request(`/api/purchases/${id}`, {
+            method: "PUT",
+            body: JSON.stringify({ id, ...payload }),
+        });
+    },
+
+    async approve(id: number | string) {
+        return request(`/api/purchases/${id}/approve`, { method: "PATCH" });
+    },
+
+    async reject(id: number | string) {
+        return request(`/api/purchases/${id}/reject`, { method: "PATCH" });
+    },
+
+    async remove(id: number | string) {
+        return request(`/api/purchases/${id}`, { method: "DELETE" });
     },
 };
 
@@ -304,6 +352,164 @@ export const expensesApi = {
             method: "PUT",
             body: JSON.stringify({ id, ...payload }),
         });
+    },
+
+    async approve(id: number | string) {
+        return request(`/api/Expenses/${id}/approve`, { method: "PATCH" });
+    },
+
+    async reject(id: number | string) {
+        return request(`/api/Expenses/${id}/reject`, { method: "PATCH" });
+    },
+
+    async remove(id: number | string) {
+        return request(`/api/Expenses/${id}`, { method: "DELETE" });
+    },
+};
+
+export const employeesApi = {
+    async list(params?: Record<string, string | number | boolean | undefined>) {
+        return request(`/api/Employees${buildQuery(params)}`);
+    },
+
+    async create(payload: Record<string, unknown>) {
+        return request("/api/Employees", {
+            method: "POST",
+            body: JSON.stringify(payload),
+        });
+    },
+
+    async update(id: number | string, payload: Record<string, unknown>) {
+        return request(`/api/Employees/${id}`, {
+            method: "PUT",
+            body: JSON.stringify({ id, ...payload }),
+        });
+    },
+
+    async remove(id: number | string) {
+        return request(`/api/Employees/${id}`, { method: "DELETE" });
+    },
+
+    async requestLeave(payload: Record<string, unknown>) {
+        return request("/api/Employees/leaves", {
+            method: "POST",
+            body: JSON.stringify(payload),
+        });
+    },
+};
+
+export const usersApi = {
+    async list(params?: Record<string, string | number | boolean | undefined>) {
+        return request(`/api/Users${buildQuery(params)}`);
+    },
+
+    async create(payload: Record<string, unknown>) {
+        return request("/api/Users", {
+            method: "POST",
+            body: JSON.stringify(payload),
+        });
+    },
+
+    async update(id: number | string, payload: Record<string, unknown>) {
+        return request(`/api/Users/${id}`, {
+            method: "PUT",
+            body: JSON.stringify({ id, ...payload }),
+        });
+    },
+
+    async remove(id: number | string) {
+        return request(`/api/Users/${id}`, { method: "DELETE" });
+    },
+
+    async resetPassword(id: number | string) {
+        return request(`/api/Users/${id}/reset-password`, { method: "POST" });
+    },
+};
+
+export const rolesApi = {
+    async list() {
+        return request("/api/Roles");
+    },
+
+    async create(payload: Record<string, unknown>) {
+        return request("/api/Roles", {
+            method: "POST",
+            body: JSON.stringify(payload),
+        });
+    },
+
+    async update(id: number | string, payload: Record<string, unknown>) {
+        return request(`/api/Roles/${id}`, {
+            method: "PUT",
+            body: JSON.stringify({ id, ...payload }),
+        });
+    },
+
+    async remove(id: number | string) {
+        return request(`/api/Roles/${id}`, { method: "DELETE" });
+    },
+
+    async permissions(id: number | string) {
+        return request(`/api/Roles/${id}/permissions`);
+    },
+
+    async updatePermissions(id: number | string, permissions: Record<string, string[]>) {
+        return request(`/api/Roles/${id}/permissions`, {
+            method: "PUT",
+            body: JSON.stringify({ permissions }),
+        });
+    },
+};
+
+export const accountingApi = {
+    async getCashbox() {
+        return request("/api/Accounting/cashbox");
+    },
+
+    async getJournal(params?: Record<string, string | number | boolean | undefined>) {
+        return request(`/api/Accounting/journal${buildQuery(params)}`);
+    },
+
+    async createJournalEntry(payload: Record<string, unknown>) {
+        return request("/api/Accounting/journal", {
+            method: "POST",
+            body: JSON.stringify(payload),
+        });
+    },
+
+    async getProfitLoss() {
+        return request("/api/Accounting/profit-loss");
+    },
+
+    async getBalanceSheet() {
+        return request("/api/Accounting/balance-sheet");
+    },
+};
+
+export const reportsApi = {
+    async get(type: string, params?: Record<string, string | number | boolean | undefined>) {
+        return request(`/api/Reports/${type}${buildQuery(params)}`);
+    },
+};
+
+export const settingsApi = {
+    async get() {
+        return request("/api/Settings");
+    },
+
+    async update(payload: Record<string, unknown>) {
+        return request("/api/Settings", {
+            method: "PUT",
+            body: JSON.stringify(payload),
+        });
+    },
+
+    async auditLog(params?: Record<string, string | number | boolean | undefined>) {
+        return request(`/api/Settings/audit-log${buildQuery(params)}`);
+    },
+
+    async createBackup() {
+        return request("/api/Settings/backup", { method: "POST" });
     },
 };
 

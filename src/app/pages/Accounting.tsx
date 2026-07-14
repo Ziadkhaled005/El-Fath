@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Download, Printer, X } from 'lucide-react';
 import { Header } from '../components/Header';
 import { useApp } from '../context/AppContext';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import { accountingApi, normalizeCollection } from '../services/api';
 
 const JOURNAL = [
   { id: 'JE-001', date: '2024-06-15', type: 'مبيعات', description: 'فاتورة مبيعات INV-2024-001', debit: 18900, credit: 0, account: 'الصندوق' },
@@ -26,10 +27,44 @@ export function Accounting() {
   const [tab, setTab] = useState<'cashbox' | 'journal' | 'pnl' | 'balance'>('cashbox');
   const [showNew, setShowNew] = useState(false);
   const [journals, setJournals] = useState(JOURNAL);
+  const [monthly, setMonthly] = useState(MONTHLY);
+  const [cashbox, setCashbox] = useState({ balance: 85000, todayIncome: 24750, todayExpense: 3500 });
+  useEffect(() => {
+    const loadAccounting = async () => {
+      try {
+        const [cashboxPayload, journalPayload, pnlPayload, balancePayload] = await Promise.all([
+          accountingApi.getCashbox(),
+          accountingApi.getJournal({ page: 1, pageSize: 100 }),
+          accountingApi.getProfitLoss(),
+          accountingApi.getBalanceSheet(),
+        ]);
+        const journalItems = normalizeCollection<(typeof JOURNAL)[0]>(journalPayload);
+        if (journalItems.length > 0) setJournals(journalItems);
+        setCashbox(prev => ({ ...prev, ...(cashboxPayload as Partial<typeof prev>) }));
+        const pnl = pnlPayload as { monthly?: typeof MONTHLY };
+        if (Array.isArray(pnl.monthly)) setMonthly(pnl.monthly);
+        void balancePayload;
+      } catch {
+        setJournals(JOURNAL);
+      }
+    };
+
+    loadAccounting();
+  }, []);
   const [form, setForm] = useState({ type: 'مبيعات', description: '', debit: '', credit: '', account: '' });
 
-  const addEntry = () => {
+  const addEntry = async () => {
     if (!form.description) { addToast({ type: 'error', message: 'الوصف مطلوب' }); return; }
+    try {
+      await accountingApi.createJournalEntry({
+        ...form,
+        debit: parseFloat(form.debit) || 0,
+        credit: parseFloat(form.credit) || 0,
+      });
+    } catch {
+      addToast({ type: 'error', message: 'تعذر حفظ القيد على الخادم' });
+      return;
+    }
     setJournals(prev => [{
       id: `JE-${String(prev.length + 1).padStart(3, '0')}`,
       date: new Date().toISOString().split('T')[0],
@@ -41,8 +76,8 @@ export function Accounting() {
     addToast({ type: 'success', message: 'تم إضافة القيد المحاسبي' });
   };
 
-  const totalIncome = MONTHLY.reduce((s, m) => s + m.income, 0);
-  const totalExpense = MONTHLY.reduce((s, m) => s + m.expense, 0);
+  const totalIncome = monthly.reduce((s, m) => s + m.income, 0);
+  const totalExpense = monthly.reduce((s, m) => s + m.expense, 0);
   const netProfit = totalIncome - totalExpense;
 
   const tabs = [
@@ -71,9 +106,9 @@ export function Accounting() {
           <div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 16, marginBottom: 24 }}>
               {[
-                { label: 'رصيد الصندوق', value: '85,000 ج.م', color: '#10B981', icon: '💰' },
-                { label: 'إيرادات اليوم', value: '24,750 ج.م', color: '#3B82F6', icon: '📈' },
-                { label: 'مصروفات اليوم', value: '3,500 ج.م', color: '#EF4444', icon: '📉' },
+                { label: 'رصيد الصندوق', value: cashbox.balance.toLocaleString('ar-EG') + ' ج.م', color: '#10B981', icon: '💰' },
+                { label: 'إيرادات اليوم', value: cashbox.todayIncome.toLocaleString('ar-EG') + ' ج.م', color: '#3B82F6', icon: '📈' },
+                { label: 'مصروفات اليوم', value: cashbox.todayExpense.toLocaleString('ar-EG') + ' ج.م', color: '#EF4444', icon: '📉' },
               ].map((s, i) => (
                 <div key={i} style={{ background: '#fff', borderRadius: 14, padding: '20px 22px', boxShadow: '0 1px 6px rgba(0,0,0,0.05)', border: '1px solid #F3F4F6' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -89,7 +124,7 @@ export function Accounting() {
             <div style={{ background: '#fff', borderRadius: 14, padding: '20px 22px', boxShadow: '0 1px 6px rgba(0,0,0,0.05)', border: '1px solid #F3F4F6' }}>
               <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 700 }}>حركة الصندوق الشهرية</h3>
               <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={MONTHLY}>
+                <BarChart data={monthly}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
                   <XAxis dataKey="month" tick={{ fontFamily: 'Cairo, sans-serif', fontSize: 12 }} />
                   <YAxis tick={{ fontFamily: 'Cairo, sans-serif', fontSize: 11 }} tickFormatter={v => (v / 1000) + 'ك'} />
@@ -169,7 +204,7 @@ export function Accounting() {
             <div style={{ background: '#fff', borderRadius: 14, padding: '24px', boxShadow: '0 1px 6px rgba(0,0,0,0.05)', border: '1px solid #F3F4F6' }}>
               <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 700 }}>المقارنة الشهرية</h3>
               <ResponsiveContainer width="100%" height={260}>
-                <BarChart data={MONTHLY}>
+                <BarChart data={monthly}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#F3F4F6" />
                   <XAxis dataKey="month" tick={{ fontFamily: 'Cairo, sans-serif', fontSize: 11 }} />
                   <YAxis tick={{ fontFamily: 'Cairo, sans-serif', fontSize: 10 }} tickFormatter={v => (v / 1000) + 'ك'} />

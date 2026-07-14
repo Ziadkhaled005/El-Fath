@@ -1,119 +1,155 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Edit, Trash2, X, Lock, Power, PowerOff } from 'lucide-react';
 import { Header } from '../components/Header';
-import { USERS, ROLES, BRANCHES } from '../data/mockData';
+import { BRANCHES, ROLES, USERS } from '../data/mockData';
 import { useApp } from '../context/AppContext';
+import { normalizeCollection, usersApi } from '../services/api';
 
 type User = typeof USERS[0];
 
+const emptyForm = { name: '', username: '', email: '', role: 'Cashier', branch: 'Main' };
+
 export function Users() {
   const { addToast } = useApp();
-  const [users, setUsers] = useState<User[]>(USERS);
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState<User | null>(null);
-  const [form, setForm] = useState({ name: '', username: '', email: '', role: 'كاشير', branch: 'الرئيسي' });
+  const [form, setForm] = useState(emptyForm);
 
-  const openEdit = (u: User) => {
-    setEditItem(u);
-    setForm({ name: u.name, username: u.username, email: u.email, role: u.role, branch: u.branch });
+  const loadUsers = async () => {
+    try {
+      const payload = await usersApi.list({ page: 1, pageSize: 100 });
+      const items = normalizeCollection<User>(payload);
+      setUsers(items.length > 0 ? items : USERS);
+    } catch {
+      setUsers(USERS);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadUsers();
+  }, []);
+
+  const openEdit = (user: User) => {
+    setEditItem(user);
+    setForm({
+      name: user.name,
+      username: user.username,
+      email: user.email,
+      role: user.role,
+      branch: user.branch,
+    });
     setShowForm(true);
   };
 
-  const save = () => {
-    if (!form.name || !form.username) { addToast({ type: 'error', message: 'الاسم واسم المستخدم مطلوبان' }); return; }
-    if (editItem) {
-      setUsers(prev => prev.map(u => u.id === editItem.id ? { ...u, ...form } : u));
-      addToast({ type: 'success', message: 'تم تحديث بيانات المستخدم' });
-    } else {
-      setUsers(prev => [...prev, { id: Date.now(), ...form, status: 'active', lastLogin: 'لم يسجل دخوله بعد' }]);
-      addToast({ type: 'success', message: 'تم إضافة المستخدم وإرسال بيانات الدخول' });
+  const save = async () => {
+    if (!form.name || !form.username) {
+      addToast({ type: 'error', message: 'Name and username are required' });
+      return;
     }
-    setShowForm(false); setEditItem(null);
+
+    try {
+      if (editItem) {
+        await usersApi.update(editItem.id, form);
+        setUsers(prev => prev.map(user => user.id === editItem.id ? { ...user, ...form } : user));
+        addToast({ type: 'success', message: 'User updated' });
+      } else {
+        await usersApi.create(form);
+        setUsers(prev => [{ id: Date.now(), ...form, status: 'active', lastLogin: 'Never' }, ...prev]);
+        addToast({ type: 'success', message: 'User created' });
+      }
+      setShowForm(false);
+      setEditItem(null);
+      setForm(emptyForm);
+    } catch {
+      addToast({ type: 'error', message: 'Server could not save the user' });
+    }
   };
 
-  const toggleStatus = (id: number) => {
-    setUsers(prev => prev.map(u => u.id === id ? { ...u, status: u.status === 'active' ? 'inactive' : 'active' } : u));
-    addToast({ type: 'success', message: 'تم تحديث حالة المستخدم' });
+  const toggleStatus = async (user: User) => {
+    const status = user.status === 'active' ? 'inactive' : 'active';
+    setUsers(prev => prev.map(item => item.id === user.id ? { ...item, status } : item));
+    try {
+      await usersApi.update(user.id, { ...user, status });
+      addToast({ type: 'success', message: 'User status updated' });
+    } catch {
+      addToast({ type: 'error', message: 'Server could not update user status' });
+    }
   };
 
-  const resetPassword = (name: string) => {
-    addToast({ type: 'info', message: `تم إرسال رابط إعادة تعيين كلمة المرور إلى ${name}` });
+  const resetPassword = async (user: User) => {
+    try {
+      await usersApi.resetPassword(user.id);
+      addToast({ type: 'info', message: `Password reset sent to ${user.name}` });
+    } catch {
+      addToast({ type: 'error', message: 'Server could not send password reset' });
+    }
+  };
+
+  const deleteUser = async (user: User) => {
+    if (!confirm('Delete user?')) return;
+    setUsers(prev => prev.filter(item => item.id !== user.id));
+    try {
+      await usersApi.remove(user.id);
+      addToast({ type: 'success', message: 'User deleted' });
+    } catch {
+      addToast({ type: 'error', message: 'Server could not delete the user' });
+    }
   };
 
   return (
     <div style={{ fontFamily: 'Cairo, sans-serif' }}>
-      <Header title="إدارة المستخدمين" breadcrumbs={[{ label: 'الرئيسية', path: '/dashboard' }, { label: 'المستخدمون' }]} />
+      <Header title="Users" breadcrumbs={[{ label: 'Dashboard', path: '/dashboard' }, { label: 'Users' }]} />
       <div style={{ padding: 24 }}>
-
-        {/* Stats */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 16, marginBottom: 24 }}>
           {[
-            { label: 'إجمالي المستخدمين', value: users.length, color: '#3B82F6' },
-            { label: 'نشطون', value: users.filter(u => u.status === 'active').length, color: '#10B981' },
-            { label: 'معطلون', value: users.filter(u => u.status === 'inactive').length, color: '#EF4444' },
-            { label: 'الأدوار', value: ROLES.length, color: '#D4AF37' },
-          ].map((s, i) => (
-            <div key={i} style={{ background: '#fff', borderRadius: 12, padding: '16px 20px', boxShadow: '0 1px 6px rgba(0,0,0,0.05)', border: '1px solid #F3F4F6' }}>
-              <p style={{ margin: '0 0 4px', fontSize: 12, color: '#9CA3AF' }}>{s.label}</p>
-              <p style={{ margin: 0, fontSize: 22, fontWeight: 800, color: s.color }}>{s.value}</p>
+            ['Total users', users.length, '#3B82F6'],
+            ['Active', users.filter(user => user.status === 'active').length, '#10B981'],
+            ['Inactive', users.filter(user => user.status === 'inactive').length, '#EF4444'],
+            ['Roles', ROLES.length, '#D4AF37'],
+          ].map(([label, value, color]) => (
+            <div key={label as string} style={{ background: '#fff', borderRadius: 12, padding: 16, border: '1px solid #F3F4F6' }}>
+              <p style={{ margin: '0 0 4px', fontSize: 12, color: '#9CA3AF' }}>{label}</p>
+              <p style={{ margin: 0, fontSize: 22, fontWeight: 800, color: color as string }}>{value}</p>
             </div>
           ))}
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
-          <button onClick={() => { setEditItem(null); setForm({ name: '', username: '', email: '', role: 'كاشير', branch: 'الرئيسي' }); setShowForm(true); }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px', border: 'none', borderRadius: 10, background: 'linear-gradient(135deg, #D4AF37, #A07B20)', cursor: 'pointer', fontSize: 13, fontFamily: 'Cairo, sans-serif', fontWeight: 700, color: '#000' }}>
-            <Plus size={15} /> مستخدم جديد
+          <button onClick={() => { setEditItem(null); setForm(emptyForm); setShowForm(true); }} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 18px', border: 'none', borderRadius: 10, background: '#D4AF37', cursor: 'pointer', fontWeight: 700 }}>
+            <Plus size={15} /> New User
           </button>
         </div>
 
-        <div style={{ background: '#fff', borderRadius: 14, boxShadow: '0 1px 6px rgba(0,0,0,0.05)', border: '1px solid #F3F4F6', overflow: 'hidden' }}>
+        <div style={{ background: '#fff', borderRadius: 14, border: '1px solid #F3F4F6', overflow: 'hidden' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
-              <tr style={{ background: '#F9FAFB', borderBottom: '1px solid #E5E7EB' }}>
-                {['المستخدم', 'اسم الدخول', 'الدور', 'الفرع', 'آخر دخول', 'الحالة', 'الإجراءات'].map(h => (
-                  <th key={h} style={{ padding: '12px 14px', textAlign: 'right', fontSize: 12, fontWeight: 600, color: '#374151', fontFamily: 'Cairo, sans-serif' }}>{h}</th>
+              <tr style={{ background: '#F9FAFB' }}>
+                {['User', 'Username', 'Role', 'Branch', 'Last login', 'Status', 'Actions'].map(header => (
+                  <th key={header} style={{ padding: 12, textAlign: 'right', fontSize: 12, color: '#374151' }}>{header}</th>
                 ))}
               </tr>
             </thead>
             <tbody>
-              {users.map(u => (
-                <tr key={u.id} style={{ borderBottom: '1px solid #F3F4F6' }}>
-                  <td style={{ padding: '12px 14px' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 36, height: 36, borderRadius: '50%', background: u.status === 'active' ? 'linear-gradient(135deg, #D4AF37, #A07B20)' : '#E5E7EB', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, color: u.status === 'active' ? '#000' : '#9CA3AF', fontWeight: 700 }}>
-                        {u.name.charAt(0)}
-                      </div>
-                      <div>
-                        <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#111827' }}>{u.name}</p>
-                        <p style={{ margin: 0, fontSize: 11, color: '#9CA3AF' }}>{u.email}</p>
-                      </div>
-                    </div>
-                  </td>
-                  <td style={{ padding: '12px 14px', fontSize: 13, color: '#6B7280', fontFamily: 'monospace' }}>{u.username}</td>
-                  <td style={{ padding: '12px 14px' }}>
-                    <span style={{ background: '#EDE9FE', color: '#7C3AED', padding: '2px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>{u.role}</span>
-                  </td>
-                  <td style={{ padding: '12px 14px', fontSize: 13, color: '#374151' }}>{u.branch}</td>
-                  <td style={{ padding: '12px 14px', fontSize: 12, color: '#9CA3AF' }}>{u.lastLogin}</td>
-                  <td style={{ padding: '12px 14px' }}>
-                    <span style={{ background: u.status === 'active' ? '#DCFCE7' : '#FEE2E2', color: u.status === 'active' ? '#16A34A' : '#DC2626', padding: '2px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>
-                      {u.status === 'active' ? 'نشط' : 'معطل'}
-                    </span>
-                  </td>
-                  <td style={{ padding: '12px 14px' }}>
-                    <div style={{ display: 'flex', gap: 5 }}>
-                      <button onClick={() => openEdit(u)} style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid #E5E7EB', background: '#F9FAFB', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Edit size={13} color="#6B7280" />
-                      </button>
-                      <button onClick={() => resetPassword(u.name)} style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid #DBEAFE', background: '#EFF6FF', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="إعادة تعيين كلمة المرور">
-                        <Lock size={13} color="#3B82F6" />
-                      </button>
-                      <button onClick={() => toggleStatus(u.id)} style={{ width: 30, height: 30, borderRadius: 6, border: `1px solid ${u.status === 'active' ? '#FEE2E2' : '#DCFCE7'}`, background: u.status === 'active' ? '#FFF5F5' : '#F0FDF4', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        {u.status === 'active' ? <PowerOff size={13} color="#EF4444" /> : <Power size={13} color="#10B981" />}
-                      </button>
-                      <button onClick={() => { if (confirm('حذف المستخدم؟')) { setUsers(prev => prev.filter(x => x.id !== u.id)); addToast({ type: 'success', message: 'تم الحذف' }); } }} style={{ width: 30, height: 30, borderRadius: 6, border: '1px solid #FEE2E2', background: '#FFF5F5', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <Trash2 size={13} color="#EF4444" />
-                      </button>
+              {loading ? (
+                <tr><td colSpan={7} style={{ padding: 32, textAlign: 'center', color: '#9CA3AF' }}>Loading...</td></tr>
+              ) : users.map(user => (
+                <tr key={user.id} style={{ borderTop: '1px solid #F3F4F6' }}>
+                  <td style={{ padding: 12, fontWeight: 700 }}>{user.name}<div style={{ fontSize: 11, color: '#9CA3AF' }}>{user.email}</div></td>
+                  <td style={{ padding: 12, color: '#6B7280' }}>{user.username}</td>
+                  <td style={{ padding: 12 }}>{user.role}</td>
+                  <td style={{ padding: 12 }}>{user.branch}</td>
+                  <td style={{ padding: 12, color: '#9CA3AF' }}>{user.lastLogin}</td>
+                  <td style={{ padding: 12, color: user.status === 'active' ? '#16A34A' : '#DC2626' }}>{user.status}</td>
+                  <td style={{ padding: 12 }}>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <button onClick={() => openEdit(user)}><Edit size={14} /></button>
+                      <button onClick={() => resetPassword(user)}><Lock size={14} /></button>
+                      <button onClick={() => toggleStatus(user)}>{user.status === 'active' ? <PowerOff size={14} /> : <Power size={14} />}</button>
+                      <button onClick={() => deleteUser(user)}><Trash2 size={14} /></button>
                     </div>
                   </td>
                 </tr>
@@ -124,41 +160,25 @@ export function Users() {
       </div>
 
       {showForm && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
-          <div style={{ background: '#fff', borderRadius: 16, padding: 28, width: 480, fontFamily: 'Cairo, sans-serif' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h3 style={{ margin: 0 }}>{editItem ? 'تعديل المستخدم' : 'مستخدم جديد'}</h3>
-              <button onClick={() => setShowForm(false)} style={{ background: 'none', border: 'none', cursor: 'pointer' }}><X size={20} /></button>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: '#fff', borderRadius: 12, padding: 24, width: 460 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
+              <h3 style={{ margin: 0 }}>{editItem ? 'Edit User' : 'New User'}</h3>
+              <button onClick={() => setShowForm(false)}><X size={18} /></button>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {[['name', 'الاسم الكامل *', 'text'], ['username', 'اسم الدخول *', 'text'], ['email', 'البريد الإلكتروني', 'email']].map(([k, label, type]) => (
-                <div key={k}>
-                  <label style={{ display: 'block', fontSize: 13, color: '#374151', marginBottom: 5 }}>{label}</label>
-                  <input type={type} value={form[k as keyof typeof form]} onChange={e => setForm(f => ({ ...f, [k]: e.target.value }))} style={{ width: '100%', padding: '10px 12px', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 13, fontFamily: 'Cairo, sans-serif', outline: 'none', boxSizing: 'border-box' }} />
-                </div>
-              ))}
-              <div>
-                <label style={{ display: 'block', fontSize: 13, color: '#374151', marginBottom: 5 }}>الدور</label>
-                <select value={form.role} onChange={e => setForm(f => ({ ...f, role: e.target.value }))} style={{ width: '100%', padding: '10px 12px', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 13, fontFamily: 'Cairo, sans-serif', outline: 'none' }}>
-                  {ROLES.map(r => <option key={r.id} value={r.name}>{r.name}</option>)}
-                </select>
-              </div>
-              <div>
-                <label style={{ display: 'block', fontSize: 13, color: '#374151', marginBottom: 5 }}>الفرع</label>
-                <select value={form.branch} onChange={e => setForm(f => ({ ...f, branch: e.target.value }))} style={{ width: '100%', padding: '10px 12px', border: '1px solid #E5E7EB', borderRadius: 8, fontSize: 13, fontFamily: 'Cairo, sans-serif', outline: 'none' }}>
-                  <option value="الكل">جميع الفروع</option>
-                  {BRANCHES.map(b => <option key={b.id} value={b.name}>{b.name}</option>)}
-                </select>
-              </div>
-              {!editItem && (
-                <div style={{ background: '#FFF9E6', border: '1px solid #FDE68A', borderRadius: 8, padding: '10px 14px', fontSize: 12, color: '#92400E' }}>
-                  ⚠️ سيتم إرسال كلمة مرور مؤقتة إلى البريد الإلكتروني للمستخدم
-                </div>
-              )}
-            </div>
-            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-              <button onClick={save} style={{ flex: 1, padding: 12, background: 'linear-gradient(135deg, #D4AF37, #A07B20)', border: 'none', borderRadius: 10, cursor: 'pointer', fontFamily: 'Cairo, sans-serif', fontWeight: 700, color: '#000' }}>حفظ</button>
-              <button onClick={() => setShowForm(false)} style={{ flex: 1, padding: 12, background: '#F3F4F6', border: 'none', borderRadius: 10, cursor: 'pointer', fontFamily: 'Cairo, sans-serif', color: '#374151' }}>إلغاء</button>
+            {(['name', 'username', 'email'] as const).map(key => (
+              <input key={key} value={form[key]} onChange={event => setForm(prev => ({ ...prev, [key]: event.target.value }))} placeholder={key} style={{ width: '100%', boxSizing: 'border-box', marginBottom: 10, padding: 10, border: '1px solid #E5E7EB', borderRadius: 8 }} />
+            ))}
+            <select value={form.role} onChange={event => setForm(prev => ({ ...prev, role: event.target.value }))} style={{ width: '100%', marginBottom: 10, padding: 10 }}>
+              {ROLES.map(role => <option key={role.id} value={role.name}>{role.name}</option>)}
+            </select>
+            <select value={form.branch} onChange={event => setForm(prev => ({ ...prev, branch: event.target.value }))} style={{ width: '100%', marginBottom: 16, padding: 10 }}>
+              <option value="All">All branches</option>
+              {BRANCHES.map(branch => <option key={branch.id} value={branch.name}>{branch.name}</option>)}
+            </select>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={save} style={{ flex: 1, padding: 12, background: '#D4AF37', border: 'none', borderRadius: 8, fontWeight: 700 }}>Save</button>
+              <button onClick={() => setShowForm(false)} style={{ flex: 1, padding: 12, border: 'none', borderRadius: 8 }}>Cancel</button>
             </div>
           </div>
         </div>

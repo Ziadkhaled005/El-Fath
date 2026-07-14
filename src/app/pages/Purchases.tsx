@@ -16,7 +16,6 @@ import { useApp } from "../context/AppContext";
 import {
     normalizeCollection,
     purchasesApi,
-    suppliersApi,
 } from "../services/api";
 
 const STATUS = {
@@ -86,7 +85,7 @@ export function Purchases() {
             prev.map((p) => (p.id === id ? { ...p, status: "approved" } : p)),
         );
         try {
-            await purchasesApi.list();
+            await purchasesApi.approve(id);
             addToast({
                 type: "success",
                 message: "تمت الموافقة على طلب الشراء",
@@ -104,7 +103,7 @@ export function Purchases() {
             prev.map((p) => (p.id === id ? { ...p, status: "rejected" } : p)),
         );
         try {
-            await purchasesApi.list();
+            await purchasesApi.reject(id);
             addToast({ type: "error", message: "تم رفض طلب الشراء" });
         } catch {
             addToast({
@@ -130,10 +129,11 @@ export function Purchases() {
         };
         setPurchases((prev) => [newP, ...prev]);
         try {
-            await suppliersApi.create({
-                name: newForm.supplier,
+            await purchasesApi.create({
+                supplier: newForm.supplier,
                 total: parseFloat(newForm.total),
                 items: parseInt(newForm.items),
+                notes: newForm.notes,
             });
             addToast({ type: "success", message: "تم إضافة طلب الشراء بنجاح" });
         } catch {

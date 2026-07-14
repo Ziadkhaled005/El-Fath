@@ -71,7 +71,7 @@ export function Sales() {
     const deleteInvoice = async (id: string) => {
         setInvoices((prev) => prev.filter((i) => i.id !== id));
         try {
-            await salesApi.create({ id, action: "delete" });
+            await salesApi.remove(id);
             addToast({ type: "success", message: "تم حذف الفاتورة بنجاح" });
         } catch {
             addToast({

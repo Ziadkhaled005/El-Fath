@@ -1,11 +1,15 @@
-import { useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router';
 import { Search, Plus, Minus, Trash2, Printer, FileText, Mail, CreditCard, Banknote, Building2, Pause, Play, X, ChevronDown } from 'lucide-react';
 import { PRODUCTS, CUSTOMERS, COMPANY } from '../data/mockData';
 import { useApp } from '../context/AppContext';
+import { customersApi, normalizeCollection, productsApi, salesApi } from '../services/api';
+
+type Product = typeof PRODUCTS[0];
+type Customer = typeof CUSTOMERS[0];
 
 interface CartItem {
-  product: typeof PRODUCTS[0];
+  product: Product;
   qty: number;
   discount: number;
 }
@@ -16,8 +20,10 @@ export function POS() {
   const { addToast } = useApp();
   const navigate = useNavigate();
   const [search, setSearch] = useState('');
+  const [products, setProducts] = useState<Product[]>(PRODUCTS);
+  const [customers, setCustomers] = useState<Customer[]>(CUSTOMERS);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [selectedCustomer, setSelectedCustomer] = useState<typeof CUSTOMERS[0] | null>(null);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [globalDiscount, setGlobalDiscount] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<'cash' | 'visa' | 'transfer'>('cash');
   const [cashReceived, setCashReceived] = useState('');
@@ -26,8 +32,28 @@ export function POS() {
   const [showHeld, setShowHeld] = useState(false);
   const [categoryFilter, setCategoryFilter] = useState('');
 
-  const categories = [...new Set(PRODUCTS.map(p => p.category))];
-  const filtered = PRODUCTS.filter(p =>
+  useEffect(() => {
+    const loadPosData = async () => {
+      try {
+        const [productPayload, customerPayload] = await Promise.all([
+          productsApi.list({ page: 1, pageSize: 200 }),
+          customersApi.list({ page: 1, pageSize: 200 }),
+        ]);
+        const productItems = normalizeCollection<Product>(productPayload);
+        const customerItems = normalizeCollection<Customer>(customerPayload);
+        if (productItems.length > 0) setProducts(productItems);
+        if (customerItems.length > 0) setCustomers(customerItems);
+      } catch {
+        setProducts(PRODUCTS);
+        setCustomers(CUSTOMERS);
+      }
+    };
+
+    loadPosData();
+  }, []);
+
+  const categories = [...new Set(products.map(p => p.category))];
+  const filtered = products.filter(p =>
     (p.name.includes(search) || p.code.includes(search) || p.barcode.includes(search)) &&
     (!categoryFilter || p.category === categoryFilter)
   );
@@ -39,7 +65,7 @@ export function POS() {
   const total = taxable + tax;
   const change = parseFloat(cashReceived || '0') - total;
 
-  const addToCart = (product: typeof PRODUCTS[0]) => {
+  const addToCart = (product: Product) => {
     if (product.stock === 0) { addToast({ type: 'error', message: 'هذا المنتج غير متوفر في المخزون' }); return; }
     setCart(prev => {
       const existing = prev.find(i => i.product.id === product.id);
@@ -70,14 +96,35 @@ export function POS() {
     setShowHeld(false);
   };
 
-  const completeSale = () => {
+  const completeSale = async () => {
     if (cart.length === 0) { addToast({ type: 'error', message: 'السلة فارغة' }); return; }
-    addToast({ type: 'success', message: `تم إتمام البيع بنجاح - الإجمالي: ${total.toFixed(2)} ج.م` });
-    setCart([]);
-    setShowPayment(false);
-    setGlobalDiscount(0);
-    setCashReceived('');
-    setSelectedCustomer(null);
+    try {
+      await salesApi.create({
+        customerId: selectedCustomer?.id,
+        customer: selectedCustomer?.name,
+        paymentMethod,
+        paid: Number(cashReceived) || total,
+        discount: globalDiscount,
+        subtotal,
+        tax,
+        total,
+        items: cart.map(item => ({
+          productId: item.product.id,
+          productName: item.product.name,
+          quantity: item.qty,
+          price: item.product.price,
+          discount: item.discount,
+        })),
+      });
+      addToast({ type: 'success', message: `تم إتمام البيع بنجاح - الإجمالي: ${total.toFixed(2)} ج.م` });
+      setCart([]);
+      setShowPayment(false);
+      setGlobalDiscount(0);
+      setCashReceived('');
+      setSelectedCustomer(null);
+    } catch {
+      addToast({ type: 'error', message: 'تعذر حفظ البيع على الخادم' });
+    }
   };
 
   const printInvoice = () => {
@@ -172,11 +219,11 @@ export function POS() {
         <div style={{ padding: '16px 16px 12px', borderBottom: '1px solid #F3F4F6' }}>
           <select
             value={selectedCustomer?.id || ''}
-            onChange={e => setSelectedCustomer(CUSTOMERS.find(c => c.id === Number(e.target.value)) || null)}
+            onChange={e => setSelectedCustomer(customers.find(c => c.id === Number(e.target.value)) || null)}
             style={{ width: '100%', padding: '10px 12px', border: '1px solid #E5E7EB', borderRadius: 10, fontSize: 13, fontFamily: 'Cairo, sans-serif', outline: 'none', color: '#111827' }}
           >
             <option value="">-- اختر العميل (عميل نقدي) --</option>
-            {CUSTOMERS.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
         </div>
 

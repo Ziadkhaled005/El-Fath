@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Save, Upload, Bell, Shield, Database, FileText, Globe, Palette, Clock } from 'lucide-react';
 import { Header } from '../components/Header';
 import { COMPANY } from '../data/mockData';
 import { useApp } from '../context/AppContext';
 import logo from '../../imports/0.png';
+import { normalizeCollection, settingsApi } from '../services/api';
 
 export function Settings() {
   const { addToast } = useApp();
@@ -14,6 +15,54 @@ export function Settings() {
   const [notifSettings, setNotifSettings] = useState({
     lowStock: true, pendingApproval: true, newOrder: true, email: false,
   });
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        const [settingsPayload, auditPayload] = await Promise.all([
+          settingsApi.get(),
+          settingsApi.auditLog({ page: 1, pageSize: 100 }),
+        ]);
+        const settings = settingsPayload as {
+          company?: typeof COMPANY;
+          taxRate?: number;
+          invoicePrefix?: string;
+          notifications?: typeof notifSettings;
+        };
+        if (settings.company) setCompany(settings.company);
+        if (typeof settings.taxRate === 'number') setTaxRate(settings.taxRate);
+        if (settings.invoicePrefix) setInvoicePrefix(settings.invoicePrefix);
+        if (settings.notifications) setNotifSettings(settings.notifications);
+        const logs = normalizeCollection<any>(auditPayload);
+        if (logs.length > 0) setAuditLogs(logs);
+      } catch {
+        setCompany(COMPANY);
+      }
+    };
+
+    loadSettings();
+  }, []);
+
+  const saveSettings = async () => {
+    try {
+      await settingsApi.update({ company, taxRate, invoicePrefix, notifications: notifSettings });
+      addToast({ type: 'success', message: 'تم حفظ الإعدادات بنجاح' });
+    } catch {
+      addToast({ type: 'error', message: 'تعذر حفظ الإعدادات على الخادم' });
+    }
+  };
+
+  const runBackupAction = async (action: string) => {
+    try {
+      if (action.includes('نسخ') || action.includes('backup')) {
+        await settingsApi.createBackup();
+      }
+      addToast({ type: 'info', message: action + '...' });
+    } catch {
+      addToast({ type: 'error', message: 'تعذر تنفيذ الإجراء على الخادم' });
+    }
+  };
 
   const save = () => addToast({ type: 'success', message: 'تم حفظ الإعدادات بنجاح' });
 
@@ -93,7 +142,7 @@ export function Settings() {
                 ))}
               </div>
 
-              <button onClick={save} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 20, padding: '11px 20px', border: 'none', borderRadius: 10, background: 'linear-gradient(135deg, #D4AF37, #A07B20)', cursor: 'pointer', fontSize: 14, fontFamily: 'Cairo, sans-serif', fontWeight: 700, color: '#000' }}>
+              <button onClick={saveSettings} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 20, padding: '11px 20px', border: 'none', borderRadius: 10, background: 'linear-gradient(135deg, #D4AF37, #A07B20)', cursor: 'pointer', fontSize: 14, fontFamily: 'Cairo, sans-serif', fontWeight: 700, color: '#000' }}>
                 <Save size={16} /> حفظ البيانات
               </button>
             </div>
@@ -122,7 +171,7 @@ export function Settings() {
                   ))}
                 </div>
               </div>
-              <button onClick={save} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 20, padding: '11px 20px', border: 'none', borderRadius: 10, background: 'linear-gradient(135deg, #D4AF37, #A07B20)', cursor: 'pointer', fontSize: 14, fontFamily: 'Cairo, sans-serif', fontWeight: 700, color: '#000' }}>
+              <button onClick={saveSettings} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 20, padding: '11px 20px', border: 'none', borderRadius: 10, background: 'linear-gradient(135deg, #D4AF37, #A07B20)', cursor: 'pointer', fontSize: 14, fontFamily: 'Cairo, sans-serif', fontWeight: 700, color: '#000' }}>
                 <Save size={16} /> حفظ الإعدادات
               </button>
             </div>
@@ -145,7 +194,7 @@ export function Settings() {
                   ))}
                 </div>
               </div>
-              <button onClick={save} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 20, padding: '11px 20px', border: 'none', borderRadius: 10, background: 'linear-gradient(135deg, #D4AF37, #A07B20)', cursor: 'pointer', fontSize: 14, fontFamily: 'Cairo, sans-serif', fontWeight: 700, color: '#000' }}>
+              <button onClick={saveSettings} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 20, padding: '11px 20px', border: 'none', borderRadius: 10, background: 'linear-gradient(135deg, #D4AF37, #A07B20)', cursor: 'pointer', fontSize: 14, fontFamily: 'Cairo, sans-serif', fontWeight: 700, color: '#000' }}>
                 <Save size={16} /> حفظ
               </button>
             </div>
@@ -189,7 +238,7 @@ export function Settings() {
                   </div>
                 ))}
               </div>
-              <button onClick={save} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 20, padding: '11px 20px', border: 'none', borderRadius: 10, background: 'linear-gradient(135deg, #D4AF37, #A07B20)', cursor: 'pointer', fontSize: 14, fontFamily: 'Cairo, sans-serif', fontWeight: 700, color: '#000' }}>
+              <button onClick={saveSettings} style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 20, padding: '11px 20px', border: 'none', borderRadius: 10, background: 'linear-gradient(135deg, #D4AF37, #A07B20)', cursor: 'pointer', fontSize: 14, fontFamily: 'Cairo, sans-serif', fontWeight: 700, color: '#000' }}>
                 <Save size={16} /> حفظ
               </button>
             </div>

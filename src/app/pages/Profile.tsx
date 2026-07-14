@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 import { Save, Lock, LogOut, User, Mail, Phone, Shield } from 'lucide-react';
 import { Header } from '../components/Header';
 import { useApp } from '../context/AppContext';
+import { authApi } from '../services/api';
 
 export function Profile() {
   const { user, logout, addToast } = useApp();
@@ -11,14 +12,30 @@ export function Profile() {
   const [form, setForm] = useState({ name: user?.name || '', email: user?.email || '', phone: '01012345678' });
   const [passwords, setPasswords] = useState({ current: '', newPass: '', confirm: '' });
 
-  const saveInfo = () => addToast({ type: 'success', message: 'تم تحديث بيانات الملف الشخصي' });
+  const saveInfo = async () => {
+    try {
+      await authApi.profile({ fullName: form.name, name: form.name, email: form.email, phone: form.phone });
+      addToast({ type: 'success', message: 'تم تحديث بيانات الملف الشخصي' });
+    } catch {
+      addToast({ type: 'error', message: 'تعذر تحديث بيانات الملف الشخصي' });
+    }
+  };
 
-  const changePassword = () => {
+  const changePassword = async () => {
     if (!passwords.current) { addToast({ type: 'error', message: 'يرجى إدخال كلمة المرور الحالية' }); return; }
     if (passwords.newPass !== passwords.confirm) { addToast({ type: 'error', message: 'كلمتا المرور غير متطابقتان' }); return; }
     if (passwords.newPass.length < 6) { addToast({ type: 'error', message: 'كلمة المرور يجب أن تكون 6 أحرف على الأقل' }); return; }
-    addToast({ type: 'success', message: 'تم تغيير كلمة المرور بنجاح' });
-    setPasswords({ current: '', newPass: '', confirm: '' });
+    try {
+      await authApi.changePassword({
+        currentPassword: passwords.current,
+        newPassword: passwords.newPass,
+        confirmPassword: passwords.confirm,
+      });
+      addToast({ type: 'success', message: 'تم تغيير كلمة المرور بنجاح' });
+      setPasswords({ current: '', newPass: '', confirm: '' });
+    } catch {
+      addToast({ type: 'error', message: 'تعذر تغيير كلمة المرور' });
+    }
   };
 
   const handleLogout = () => {

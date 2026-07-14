@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Plus, Search, Download, CheckCircle, XCircle, Clock, X, Eye } from 'lucide-react';
 import { Header } from '../components/Header';
 import { EXPENSES } from '../data/mockData';
 import { useApp } from '../context/AppContext';
+import { expensesApi, normalizeCollection } from '../services/api';
 
 type Expense = typeof EXPENSES[0];
 const STATUS_MAP = {
@@ -22,6 +23,20 @@ export function Expenses() {
   const [viewItem, setViewItem] = useState<Expense | null>(null);
   const [form, setForm] = useState({ category: 'إيجار', description: '', amount: '', branch: 'الرئيسي' });
 
+  useEffect(() => {
+    const loadExpenses = async () => {
+      try {
+        const payload = await expensesApi.list({ page: 1, pageSize: 100 });
+        const items = normalizeCollection<Expense>(payload);
+        if (items.length > 0) setExpenses(items);
+      } catch {
+        setExpenses(EXPENSES);
+      }
+    };
+
+    loadExpenses();
+  }, []);
+
   const filtered = expenses.filter(e =>
     (e.description.includes(search) || e.category.includes(search)) &&
     (!statusFilter || e.status === statusFilter)
@@ -32,17 +47,27 @@ export function Expenses() {
   const approved = expenses.filter(e => e.status === 'approved');
   const approvedTotal = approved.reduce((s, e) => s + e.amount, 0);
 
-  const approve = (id: string) => {
+  const approve = async (id: string) => {
     setExpenses(prev => prev.map(e => e.id === id ? { ...e, status: 'approved' as const } : e));
-    addToast({ type: 'success', message: 'تمت الموافقة على المصروف' });
+    try {
+      await expensesApi.approve(id);
+      addToast({ type: 'success', message: 'تمت الموافقة على المصروف' });
+    } catch {
+      addToast({ type: 'error', message: 'تعذر حفظ الموافقة على الخادم' });
+    }
   };
 
-  const reject = (id: string) => {
+  const reject = async (id: string) => {
     setExpenses(prev => prev.map(e => e.id === id ? { ...e, status: 'rejected' as const } : e));
-    addToast({ type: 'error', message: 'تم رفض المصروف' });
+    try {
+      await expensesApi.reject(id);
+      addToast({ type: 'error', message: 'تم رفض المصروف' });
+    } catch {
+      addToast({ type: 'error', message: 'تعذر حفظ الرفض على الخادم' });
+    }
   };
 
-  const addExpense = () => {
+  const addExpense = async () => {
     if (!form.description || !form.amount) { addToast({ type: 'error', message: 'يرجى ملء جميع الحقول' }); return; }
     const newE: Expense = {
       id: `EXP-${String(expenses.length + 1).padStart(3, '0')}`,
@@ -55,9 +80,19 @@ export function Expenses() {
       submittedBy: 'المستخدم الحالي',
     };
     setExpenses(prev => [newE, ...prev]);
-    setShowNew(false);
-    setForm({ category: 'إيجار', description: '', amount: '', branch: 'الرئيسي' });
-    addToast({ type: 'success', message: 'تم تقديم المصروف وهو بانتظار الموافقة' });
+    try {
+      await expensesApi.create({
+        category: form.category,
+        description: form.description,
+        amount: parseFloat(form.amount),
+        branch: form.branch,
+      });
+      addToast({ type: 'success', message: 'تم تقديم المصروف وهو بانتظار الموافقة' });
+      setShowNew(false);
+      setForm({ category: 'إيجار', description: '', amount: '', branch: 'الرئيسي' });
+    } catch {
+      addToast({ type: 'error', message: 'تعذر حفظ المصروف على الخادم' });
+    }
   };
 
   return (
